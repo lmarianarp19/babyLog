@@ -8,15 +8,6 @@ client = anthropic.Anthropic(
     default_headers={"anthropic-workspace-id": "wrkspc_01HSHfFvEmQsB68Ggye1B3k3"}
 )
 
-test_entries = [
-    "fed on the left side, 15 minutes",
-    "fed on the left for like 10 min then right, maybe 10 more",
-    "nursed, not sure how long",
-    "bottle of 3 oz pumped milk",
-    "fed 15 minutes",
-    "fed left 10 min, not interested, then 2 oz bottle",
-]
-
 
 def build_prompt(entry):
     return (
@@ -69,10 +60,19 @@ def parse_reply(text):
     return data
 
 
-failures = 0
+class FeedError(Exception):
+    """Raised when the model's reply can't be turned into a feed record."""
 
-for entry in test_entries:
-    print("entry:", entry, file=sys.stderr)
+    def __init__(self, message, raw_reply=""):
+        super().__init__(message)
+        self.raw_reply = raw_reply
+
+
+def extract_feed(entry):
+    """Send one feeding entry to the model and return it as a dict.
+
+    Raises FeedError if the reply was cut off or isn't a valid JSON object.
+    """
     message = client.messages.create(
         model="claude-haiku-5-5",
         max_tokens=900,
@@ -82,28 +82,34 @@ for entry in test_entries:
         }],
     )
 
-    print("stop_reason:", message.stop_reason, file=sys.stderr)
-    print("block types:", [block.type for block in message.content], file=sys.stderr)
-
     reply = "".join(block.text for block in message.content if block.type == "text")
 
     if message.stop_reason != "end_turn":
-        print(f"ERROR: reply incomplete (stop_reason={message.stop_reason})", file=sys.stderr)
-        print("raw reply:", reply, file=sys.stderr)
-        failures += 1
-        continue
+        raise FeedError(f"reply incomplete (stop_reason={message.stop_reason})", reply)
 
     try:
-        data = parse_reply(reply)
+        return parse_reply(reply)
     except ValueError as err:
+        raise FeedError(str(err), reply) from None
+
+
+def main():
+    if len(sys.argv) != 2:
+        print('usage: python3 baby_log.py "fed on the left side, 15 minutes"', file=sys.stderr)
+        sys.exit(2)
+
+    try:
+        feed = extract_feed(sys.argv[1])
+    except FeedError as err:
         print(f"ERROR: {err}", file=sys.stderr)
-        print("raw reply:", reply, file=sys.stderr)
-        failures += 1
-        continue
+        print("raw reply:", err.raw_reply, file=sys.stderr)
+        sys.exit(1)
+    except anthropic.APIError as err:
+        print(f"API ERROR: {err}", file=sys.stderr)
+        sys.exit(1)
 
-    print(json.dumps(data, indent=2), flush=True)
-    print(file=sys.stderr)
+    print(json.dumps(feed, indent=2))
 
-if failures:
-    print(f"{failures} of {len(test_entries)} entries failed", file=sys.stderr)
-    sys.exit(1)
+
+if __name__ == "__main__":
+    main()

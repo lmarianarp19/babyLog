@@ -3,7 +3,10 @@
 A small Python script that turns a short spoken or typed feeding entry into structured JSON.
 
 ## Current state
-- `baby-log.py` sends each entry in `test_entries` to the Claude API, checks the reply is valid JSON (stripping ```json fences), and prints it.
+- `baby_log.py` takes one entry from the command line, sends it to the Claude API, checks the reply is valid JSON (stripping ```json fences), and prints it:
+  `python3 baby_log.py "fed on the left side, 15 minutes"`
+- `extract_feed(entry)` in `baby_log.py` does the work for one entry and returns a dict (raises `FeedError` on a bad reply). Other code (tests, future voice input) should call it.
+- `test_baby_log.py` holds the tests. `python3 test_baby_log.py --offline` runs only the free `parse_reply` tests; without the flag it also sends each test entry to the API and compares the reply with the expected values.
 - Uses `claude-haiku-5-5` with the `anthropic` Python package.
 - The API key is read from the `ANTHROPIC_API_KEY` environment variable. Never hardcode it.
 
@@ -27,4 +30,4 @@ A small Python script that turns a short spoken or typed feeding entry into stru
 - This is a tracking tool, not medical advice.
 
 ## Test entries
-The test entries live in the `test_entries` list in `baby-log.py`. Add or change them there.
+The test entries live in the `test_entries` list in `test_baby_log.py`, each paired with the values the model should return. Add or change them there.
